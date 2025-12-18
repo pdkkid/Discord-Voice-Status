@@ -18,7 +18,8 @@ function syncInitialVoiceStates(guild: Guild) {
 export function startDiscordClient(
   token: string,
   guildId: string,
-  onVoiceChange: () => void
+  onVoiceChange: () => void,
+  onReady?: () => void
 ) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
@@ -36,6 +37,7 @@ export function startDiscordClient(
 
     // Push initial state to ESP clients
     onVoiceChange();
+    onReady?.();
   });
 
   // Also handle reconnects / new guild availability events

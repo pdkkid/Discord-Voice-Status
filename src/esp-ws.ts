@@ -124,5 +124,6 @@ export function startEspWebSocketServer(port: number, authToken: string) {
 
   return {
     broadcastState,
+    getEspClientCount: () => espClients.size,
   };
 }
