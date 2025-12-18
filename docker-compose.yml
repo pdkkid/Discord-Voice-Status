@@ -16,5 +16,5 @@ services:
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
-      - app
+      - discordvoice
     restart: unless-stopped
