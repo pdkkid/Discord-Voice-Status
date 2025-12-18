@@ -1,5 +1,5 @@
 services:
-  app:
+  discordvoice:
     image: ghcr.io/pdkkid/discord-voice-status:latest
     container_name: discord-voice-status
     restart: unless-stopped
