@@ -1,193 +1,320 @@
 # Discord Voice Status Server
 
-A self-hosted service that connects to Discord, tracks real-time voice channel activity, and exposes a lightweight WebSocket API for ESP32 / ESP8266 devices (or other clients) to consume.
+![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
+![WebSocket](https://img.shields.io/badge/websocket-supported-orange)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-This server is designed to power physical indicators (LEDs, signs, panels, etc.) that reflect whether users are currently connected to Discord voice channels.
+A self-hosted service that connects to Discord, tracks real-time voice channel activity, and exposes a lightweight WebSocket API for ESP32 / ESP8266 devices (or other clients).
+
+This project is designed to power **physical indicators** (LEDs, signs, panels, status lights, etc.) that reflect whether users are currently connected to Discord voice channels.
 
 ---
 
-## What this project does
+## ✨ Features
 
 - Connects to the Discord Gateway (WebSocket)
-- Subscribes to **VOICE_STATE_UPDATE** events
-- Tracks whether **any user is currently in a voice channel**
-- Hosts its **own WebSocket server** for embedded devices
-- Pushes **real-time boolean state updates** (`1` / `0`) to clients
-- Supports **authenticated clients** (ESP devices)
-- Designed to run **locally, in Docker, or on a VPS**
-- Internet-exposable (Cloudflare Tunnel friendly)
+- Listens for VOICE_STATE_UPDATE events
+- Tracks whether any users are currently in voice chat
+- Hosts its own WebSocket server for ESP devices
+- Push-based real-time updates (no polling)
+- Token-authenticated ESP clients
+- Runs locally, in Docker, or on a VPS
+- Internet-friendly (Cloudflare Tunnel supported)
 
 ---
 
-## Architecture overview
+## 🚀 Quick Start (Docker – recommended)
 
-Discord Gateway (WSS)
-│
-▼
-Discord Voice Status Server
-│
-├── Tracks voice state in memory
-│
-├── WebSocket Server (/ws)
-│ └── Authenticated ESP clients
-│
-└── (optional) Admin / OTA endpoints
+### 1. Create a Discord bot
 
+- Enable **Server Members Intent**
+- Enable **Voice States Intent**
+- Invite the bot to your server
+
+### 2. Create a `.env` file
+
+DISCORD_TOKEN=your_discord_bot_token  
+GUILD_ID=your_discord_server_id  
+
+ESP_AUTH_TOKEN=your_shared_esp_token  
+PORT=8080
+HEALTH_PORT=3000
+
+### 3. Run with Docker
+
+docker run -d \
+  --name discord-voice-status \
+  -p 8080:8080 \
+  --env-file .env \
+  ghcr.io/pdkkid/discord-voice-status:latest
+
+### 4. Connect ESP devices
+
+ESP devices connect to:
+
+wss://your-domain/ws
+
+(Or ws://localhost:8080/ws when running locally)
 
 ---
 
-## ESP device integration
+## 🧠 Architecture Overview
 
-ESP devices connect to the server’s WebSocket endpoint and receive:
+flowchart TB
+  subgraph Discord["Discord"]
+    DGW["Discord Gateway (WSS)<br>VOICE_STATE_UPDATE events"]
+  end
+
+  subgraph Server["Discord Voice Status Server"]
+    BOT["Discord Gateway Client<br>(Intents + Session)"]
+    STATE["In-memory Voice State<br>(any user in voice = true/false)"]
+
+    WSSRV["ESP WebSocket Server<br>/ws"]
+    AUTH["Auth Handler<br>Validate ESP_AUTH_TOKEN"]
+    HEALTH["HTTP Health Endpoint<br>/health"]
+  end
+
+  subgraph Clients["Clients"]
+    ESP["ESP8266 / ESP32 / ESP32-S2<br>WebSocket Client<br>LED / Relay Output"]
+    OTHER["Optional Web UI / Other Clients"]
+  end
+
+  subgraph Cloudflare["Cloudflare (optional)"]
+    TUNNEL["cloudflared Tunnel<br>HTTPS / WSS"]
+  end
+
+  %% Discord flow
+  DGW --> BOT
+  BOT --> STATE
+
+  %% ESP connection + auth
+  ESP -->|wss://domain/ws| TUNNEL
+  TUNNEL --> WSSRV
+  WSSRV --> AUTH
+
+  %% Auth results
+  AUTH -->|AUTH OK| WSSRV
+  AUTH -->|NOAUTH| DROP["Close Connection"]
+
+  %% State push
+  STATE --> WSSRV
+  WSSRV -->|push 1 / 0| ESP
+  WSSRV --> OTHER
+
+  %% Health route
+  TUNNEL --> HEALTH
+
+### High-level data flow
+
+Discord Gateway (WSS)  
+↓  
+Discord Voice Status Server  
+↓  
+WebSocket Server (/ws)  
+↓  
+Authenticated ESP Clients  
+
+Detailed breakdown:
+
+- Discord Gateway sends VOICE_STATE_UPDATE events
+- Server tracks current voice presence in memory
+- When state changes, all connected ESP clients are notified
+- ESP devices toggle GPIO outputs (LEDs, relays, etc.)
+
+No Discord user data is forwarded to devices.
+
+---
+
+## 🔌 ESP Device Integration
+
+ESP devices receive **simple boolean state updates**:
 
 - `1` → one or more users are in voice chat
 - `0` → nobody is in voice chat
 
-ESP devices:
-- authenticate using a shared token
-- maintain a persistent WebSocket connection
-- reconnect automatically if the server restarts
+Device behavior:
 
-👉 **Firmware + flashing tools:**  
-https://github.com/pdkkid/Discord-Voice-Status-ESP
+- Authenticate using a shared token
+- Maintain persistent WebSocket connection
+- Auto-reconnect if the server restarts
+
+👉 Firmware, OTA, and flashing tools:  
+<https://github.com/pdkkid/Discord-Voice-Status-ESP>
 
 That repository includes:
-- ESP32-S2, ESP32, ESP8266 support
-- captive portal WiFi setup
+
+- ESP32-S2, ESP8266 support
+- Captive portal WiFi configuration
 - OTA updates
-- GitHub Pages flashing
-- versioned firmware builds
+- GitHub Pages browser flashing
+- Versioned firmware builds
 
 ---
 
-## Prerequisites
+## 📋 Prerequisites
 
 ### Required
+
 - Discord Bot Token
 - Discord Server (Guild) ID
-- Node.js 18+ **or** Docker
+- Node.js 18+ OR Docker
 
-### Discord bot requirements
-
-The bot **must** have the following privileged intents enabled:
+### Discord bot permissions
 
 - Server Members Intent
 - Voice States Intent
-
-And be added to your server with at least:
 - View Channels
 - Connect
 
 ---
 
-## Environment variables
+## ⚙️ Configuration
 
-Create a `.env` file:
+### Environment variables
 
-```env
-DISCORD_TOKEN=your_discord_bot_token
-GUILD_ID=your_guild_id
+- DISCORD_TOKEN
+- GUILD_ID  
+- PORT (default: 8080)
+- ESP_AUTH_TOKEN  
 
-PORT=8080
-WS_PATH=/ws
+---
 
-ESP_AUTH_TOKEN=supersecret_token_here
-LOG_LEVEL=info
+## ▶️ Running Locally (Node.js)
 
-// Fix below
+npm install  
+npm run build  
+npm start  
 
-Running locally (Node.js)
-npm install
-npm run build
-npm start
-
-
-The WebSocket server will be available at:
+WebSocket endpoint:
 
 ws://localhost:8080/ws
 
-Running with Docker (recommended)
-Build
-docker build -t discord-voice-status .
+---
 
-Run
-docker run -d \
-  --name discord-voice-status \
-  -p 8080:8080 \
-  --env-file .env \
-  discord-voice-status
+## 🐳 Health Checks
 
-Health checks
-
-The server exposes a lightweight health endpoint:
+The server exposes:
 
 GET /health
 
+Used for:
 
-Useful for:
+- Docker healthchecks
+- Cloudflare Tunnel monitoring
+- Uptime checks
 
-Docker healthchecks
+---
 
-Cloudflare Tunnel monitoring
+## 🔐 WebSocket Protocol (ESP Clients)
 
-uptime checks
+Connection:
 
-WebSocket protocol (ESP clients)
-Connection
-ws://<server>:8080/ws
+ws://<server>:8080/ws  
 
-Authentication
+Authentication:
 
-Immediately after connecting:
-
-AUTH:<token>
-
+AUTH:<token>  
 
 Responses:
 
-OK → authenticated
+- OK     → authenticated
+- NOAUTH → invalid token
 
-NOAUTH → invalid token
+State updates:
 
-State updates
-1  → voice activity detected
-0  → no users in voice chat
+- 1 → voice activity detected
+- 0 → no users in voice chat
 
-Security considerations
+## 🔒 Security Notes
 
-ESP clients authenticate using a shared token
+- ESP clients authenticate via shared token
+- No Discord user IDs or names are sent to devices
+- No voice history is stored
+- OTA updates should be signed (recommended)
 
-No Discord user data is sent to clients
+---
 
-No voice history is stored
+## 🌍 Internet Exposure
 
-OTA messages should be signed (recommended)
+Designed to be exposed safely using:
 
-Internet exposure
+- Cloudflare Tunnel (recommended)
+- Reverse proxy (Caddy, Nginx, Traefik)
 
-This server is designed to be exposed safely using:
+Only port 8080 needs to be reachable by the tunnel/proxy.
 
-Cloudflare Tunnel (recommended)
+## ☁️ Cloudflare Tunnel Setup (Recommended)
 
-Reverse proxy (Caddy, Nginx, Traefik)
+Cloudflare Tunnel allows you to expose this server to the internet **without opening any inbound ports** on your network.
 
-Only port 8080 needs to be reachable.
+The Discord Voice Status Server works very well behind Cloudflare Tunnel and supports WebSockets out of the box.
 
-Related repositories
+### Why use Cloudflare Tunnel?
 
-ESP Firmware & Flashing Tools
-https://github.com/pdkkid/Discord-Voice-Status-ESP
+- No port forwarding required
+- Works behind NAT, CGNAT, or firewalls
+- Automatic HTTPS (WSS) support
+- Protects your origin IP
+- Stable WebSocket connections for ESP devices
 
-Roadmap
+## Tunnel Token (Quick setup)
 
-Admin API for OTA updates
+If you prefer not to manage credential files, Cloudflare provides a tunnel token.
 
-Signed OTA payloads
+### 1. Create tunnel in Cloudflare dashboard
 
-Device identity + fleet tracking
+- Go to Cloudflare Zero Trust
+- Access → Tunnels → Create Tunnel
+- Choose Docker
+- Copy the provided token
 
-Optional Redis persistence
+### 2. Docker Compose using token
 
-Web dashboard
+- Add `CLOUDFLARE_TUNNEL_TOKEN` environment variable with recieved token
+- Use the `docker-compose.yml` included in the repo
+- `docker compose up`
 
-Multi-guild support
+## WebSocket Notes
+
+- Cloudflare Tunnel fully supports WebSockets
+- ESP devices should connect using:
+  
+  wss://your-domain/ws
+
+- No additional TLS configuration is required
+- Heartbeats are recommended for long-lived connections
+
+## Troubleshooting
+
+- If ESP devices disconnect:
+  - Ensure heartbeats are enabled on the server
+  - Avoid very aggressive idle timeouts
+- If tunnel fails:
+  - Check cloudflared logs
+  - Verify credentials.json permissions
+  - Ensure the hostname exists in Cloudflare DNS
+
+---
+
+## 🔗 Related Projects
+
+ESP Firmware & Flashing Tools  
+<https://github.com/pdkkid/Discord-Voice-Status-ESP>
+
+---
+
+## 🛣 Roadmap
+
+- Admin API for OTA updates
+- Signed OTA payloads
+- Device identity & fleet tracking
+- Optional Redis persistence
+- Web dashboard
+- Multi-guild support
+
+---
+
+## 📄 License
+
+MIT
