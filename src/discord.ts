@@ -1,7 +1,19 @@
 // src/discord.ts
 
-import { Client, GatewayIntentBits, VoiceState } from "discord.js";
+import { Client, GatewayIntentBits, VoiceState, Guild } from "discord.js";
 import { voiceUsers } from "./state";
+
+function syncInitialVoiceStates(guild: Guild) {
+  voiceUsers.clear();
+
+  for (const [, vs] of guild.voiceStates.cache) {
+    if (vs.channelId) {
+      voiceUsers.add(vs.id); // vs.id is the userId
+    }
+  }
+
+  console.log(`🔄 Initial voice sync: ${voiceUsers.size} user(s) in voice`);
+}
 
 export function startDiscordClient(
   token: string,
@@ -12,8 +24,25 @@ export function startDiscordClient(
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
   });
 
-  client.once("ready", () => {
+  client.once("ready", async () => {
     console.log(`✅ Discord connected as ${client.user?.tag}`);
+
+    // Ensure guild exists (cache is usually ready here)
+    const guild =
+      client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId));
+
+    // Build initial state from the cached voice states
+    syncInitialVoiceStates(guild);
+
+    // Push initial state to ESP clients
+    onVoiceChange();
+  });
+
+  // Also handle reconnects / new guild availability events
+  client.on("guildCreate", guild => {
+    if (guild.id !== guildId) return;
+    syncInitialVoiceStates(guild);
+    onVoiceChange();
   });
 
   client.on(
@@ -38,9 +67,7 @@ export function startDiscordClient(
         console.log(`➖ ${userId} left voice`);
       }
 
-      if (changed) {
-        onVoiceChange();
-      }
+      if (changed) onVoiceChange();
     }
   );
 
