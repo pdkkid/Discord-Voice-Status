@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - GUILD_ID=${GUILD_ID}
+      - ESP_WS_PORT=8080
+      - ESP_AUTH_TOKEN=${ESP_AUTH_TOKEN}
+      - HEALTH_PORT=3000
+    expose:
+      - "8080"
+      - "3000"
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+    restart: unless-stopped

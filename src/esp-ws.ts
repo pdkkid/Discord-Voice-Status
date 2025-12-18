@@ -66,7 +66,10 @@ function setupHeartbeat(wss: WebSocketServer) {
 }
 
 export function startEspWebSocketServer(port: number, authToken: string) {
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({
+    port,
+    path: "/ws",
+  });
 
   console.log(`📡 ESP WebSocket server listening on :${port}`);
 
