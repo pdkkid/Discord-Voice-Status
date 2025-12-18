@@ -1,3 +1,30 @@
+flowchart TB
+  subgraph Discord["Discord"]
+    DGW["Discord Gateway (WSS)\nVOICE_STATE_UPDATE events"]
+  end
+
+  subgraph Server["Discord Voice Status Server"]
+    BOT["Discord Gateway Client\n(Intents + Session)"]
+    STATE["In-memory Voice State\n(any user in voice = true/false)"]
+    WSSRV["ESP WebSocket Server\n/ws"]
+    AUTH["Auth Handler\nValidate ESP_AUTH_TOKEN"]
+  end
+
+  subgraph Clients["Clients"]
+    ESP["ESP Devices\nESP8266 / ESP32 / ESP32-S2"]
+  end
+
+  DGW --> BOT
+  BOT --> STATE
+
+  ESP -->|connect| WSSRV
+  WSSRV -->|AUTH:<token>| AUTH
+  AUTH -->|OK| WSSRV
+  AUTH -->|NOAUTH| DROP["Close Connection"]
+
+  STATE --> WSSRV
+  WSSRV -->|push 1 / 0| ESP
+
 # Discord Voice Status Server
 
 ![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
@@ -56,33 +83,6 @@ wss://your-domain/ws
 ---
 
 ## 🧠 Architecture Overview
-
-flowchart TB
-  subgraph Discord["Discord"]
-    DGW["Discord Gateway (WSS)\nVOICE_STATE_UPDATE events"]
-  end
-
-  subgraph Server["Discord Voice Status Server"]
-    BOT["Discord Gateway Client\n(Intents + Session)"]
-    STATE["In-memory Voice State\n(any user in voice = true/false)"]
-    WSSRV["ESP WebSocket Server\n/ws"]
-    AUTH["Auth Handler\nValidate ESP_AUTH_TOKEN"]
-  end
-
-  subgraph Clients["Clients"]
-    ESP["ESP Devices\nESP8266 / ESP32 / ESP32-S2"]
-  end
-
-  DGW --> BOT
-  BOT --> STATE
-
-  ESP -->|connect| WSSRV
-  WSSRV -->|AUTH:<token>| AUTH
-  AUTH -->|OK| WSSRV
-  AUTH -->|NOAUTH| DROP["Close Connection"]
-
-  STATE --> WSSRV
-  WSSRV -->|push 1 / 0| ESP
 
 ### High-level data flow
 
