@@ -1,34 +1,77 @@
 // src/esp-ws.ts
 
 import WebSocket, { WebSocketServer } from "ws";
-import { isAnyoneInVoice, isUserInVoice } from "./state";
+import { isAnyoneInVoice } from "./state";
 
-export function startEspWebSocketServer(port: number) {
+const AUTH_TIMEOUT_MS = 5000;
+
+const espClients = new Set<WebSocket>();
+
+function broadcastState() {
+  const payload = isAnyoneInVoice() ? "1" : "0";
+
+  for (const ws of espClients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    }
+  }
+}
+
+export function startEspWebSocketServer(
+  port: number,
+  authToken: string,
+  onClientReady?: () => void
+) {
   const wss = new WebSocketServer({ port });
 
   console.log(`📡 ESP WebSocket server listening on :${port}`);
 
   wss.on("connection", (ws: WebSocket) => {
+    let authenticated = false;
+
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) {
+        ws.send("NOAUTH");
+        ws.close();
+      }
+    }, AUTH_TIMEOUT_MS);
+
     ws.on("message", data => {
       const msg = data.toString();
 
-      // ultra-simple protocol
-      if (msg === "ANY") {
-        ws.send(isAnyoneInVoice() ? "1" : "0");
+      // --- AUTH PHASE ---
+      if (!authenticated) {
+        if (msg.startsWith("AUTH:")) {
+          const token = msg.substring(5);
+
+          if (token === authToken) {
+            authenticated = true;
+            clearTimeout(authTimeout);
+
+            espClients.add(ws);
+            ws.send("OK");
+
+            // Immediately push current state
+            ws.send(isAnyoneInVoice() ? "1" : "0");
+            return;
+          }
+        }
+
+        ws.send("NOAUTH");
+        ws.close();
         return;
       }
 
-      // USER:<id>
-      if (msg.startsWith("USER:")) {
-        const userId = msg.substring(5);
-        ws.send(isUserInVoice(userId) ? "1" : "0");
-        return;
-      }
-
-      ws.send("ERR");
+      // Ignore all other messages (push-only)
     });
 
-    // Send initial state immediately
-    ws.send(isAnyoneInVoice() ? "1" : "0");
+    ws.on("close", () => {
+      clearTimeout(authTimeout);
+      espClients.delete(ws);
+    });
   });
+
+  return {
+    broadcastState,
+  };
 }
