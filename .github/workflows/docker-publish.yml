@@ -36,7 +36,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ghcr.io/${{ github.repository_owner }}/discord-voice-status
           tags: |
             # tag builds: v1.0.0 / V1.0.0
             type=ref,event=tag

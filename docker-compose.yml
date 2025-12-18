@@ -1,6 +1,8 @@
 services:
   app:
-    build: .
+    image: ghcr.io/pdkkid/discord-voice-status:latest
+    container_name: discord-voice-status
+    restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - GUILD_ID=${GUILD_ID}
@@ -9,8 +11,6 @@ services:
       - HEALTH_PORT=3000
     expose:
       - "8080"
-      - "3000"
-    restart: unless-stopped
 
   cloudflared:
     image: cloudflare/cloudflared:latest
