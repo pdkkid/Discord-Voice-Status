@@ -34,12 +34,8 @@ This project is designed to power **physical indicators** (LEDs, signs, panels, 
 
 ### 2. Create a `.env` file
 
-DISCORD_TOKEN=your_discord_bot_token  
-GUILD_ID=your_discord_server_id  
-
-ESP_AUTH_TOKEN=your_shared_esp_token  
-PORT=8080
-HEALTH_PORT=3000
+- Clone the `.env.example` from this repo and rename it to `.env`
+- Update the values accordingly
 
 ### 3. Run with Docker
 
@@ -63,47 +59,30 @@ wss://your-domain/ws
 
 flowchart TB
   subgraph Discord["Discord"]
-    DGW["Discord Gateway (WSS)<br>VOICE_STATE_UPDATE events"]
+    DGW["Discord Gateway (WSS)\nVOICE_STATE_UPDATE events"]
   end
 
   subgraph Server["Discord Voice Status Server"]
-    BOT["Discord Gateway Client<br>(Intents + Session)"]
-    STATE["In-memory Voice State<br>(any user in voice = true/false)"]
-
-    WSSRV["ESP WebSocket Server<br>/ws"]
-    AUTH["Auth Handler<br>Validate ESP_AUTH_TOKEN"]
-    HEALTH["HTTP Health Endpoint<br>/health"]
+    BOT["Discord Gateway Client\n(Intents + Session)"]
+    STATE["In-memory Voice State\n(any user in voice = true/false)"]
+    WSSRV["ESP WebSocket Server\n/ws"]
+    AUTH["Auth Handler\nValidate ESP_AUTH_TOKEN"]
   end
 
   subgraph Clients["Clients"]
-    ESP["ESP8266 / ESP32 / ESP32-S2<br>WebSocket Client<br>LED / Relay Output"]
-    OTHER["Optional Web UI / Other Clients"]
+    ESP["ESP Devices\nESP8266 / ESP32 / ESP32-S2"]
   end
 
-  subgraph Cloudflare["Cloudflare (optional)"]
-    TUNNEL["cloudflared Tunnel<br>HTTPS / WSS"]
-  end
-
-  %% Discord flow
   DGW --> BOT
   BOT --> STATE
 
-  %% ESP connection + auth
-  ESP -->|wss://domain/ws| TUNNEL
-  TUNNEL --> WSSRV
-  WSSRV --> AUTH
-
-  %% Auth results
-  AUTH -->|AUTH OK| WSSRV
+  ESP -->|connect| WSSRV
+  WSSRV -->|AUTH:<token>| AUTH
+  AUTH -->|OK| WSSRV
   AUTH -->|NOAUTH| DROP["Close Connection"]
 
-  %% State push
   STATE --> WSSRV
   WSSRV -->|push 1 / 0| ESP
-  WSSRV --> OTHER
-
-  %% Health route
-  TUNNEL --> HEALTH
 
 ### High-level data flow
 
